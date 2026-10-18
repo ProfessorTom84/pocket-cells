@@ -235,18 +235,14 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
     if (!factories[b]) { await loadScript("dish-" + b + ".js"); factories[b] = window.createDish; }
     return factories[b];
   }
-  let loading = null;
-  const press = b => document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c.dataset.board === b)));
   async function start(b) {
-    if (b === board || b === loading) return;   /* a second click while loading would start a second loop */
-    loading = b;
+    if (b === board) return;
+    if (M) { writeSave(); cancelAnimationFrame(raf); }
     statusEl.textContent = "Loading the " + NAMES[b] + "'s dish...";
-    press(b);
+    document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c.dataset.board === b)));
     try {
       const mod = await (await factory(b))();
-      if (loading !== b) return;               /* another board was picked meanwhile */
-      if (M) { writeSave(); cancelAnimationFrame(raf); }
-      M = mod; board = b; loading = null;
+      M = mod; board = b;
       const W = M._web_w(), H = M._web_h();
       canvas.width = W; canvas.height = H; boardEl.dataset.shape = b;
       boardEl.style.width = "min(100%, " + Math.round(W * 1.35 + 40) + "px)";
@@ -263,8 +259,6 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
       try { localStorage.setItem("pocketdish.board", b); } catch (e) {}
       last = 0; raf = requestAnimationFrame(loop);
     } catch (e) {
-      if (loading !== b) return;
-      loading = null; press(board);            /* the old board keeps running */
       statusEl.textContent = "The " + NAMES[b] + "'s module would not load (" + e.message + "). Serve this folder over http, not as a file.";
     }
   }
