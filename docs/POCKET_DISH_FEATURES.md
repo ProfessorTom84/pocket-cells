@@ -4,7 +4,7 @@ Every system in the game, what it does, and the value to change to tune it.
 
 **Where the code is:** the `dish` branch of `pocket-cells_vF`, checked out at
 `~/Documents/GitHub/pocket-dish-work`. Paths below are relative to that checkout.
-Line numbers are as of commit `baac2ac`. "Knob" means the value to change.
+Line numbers are as of commit `baac2ac`; where code moved in `4f0cf74`, sections name the function instead. "Knob" means the value to change.
 
 ---
 
@@ -150,8 +150,33 @@ Files: `common/dish_brain.c`, `common/dish_ai.c`.
   same kinds of decisions. Rough priorities:
   - Threat nearby: turn to spores if weak, fight if strong, otherwise flee or huddle.
   - Then: low comfort, light, hunger, friends, prey, crowding, night, splitting.
-- **What you see:** thought lines (dashed lines toward the target), the
+- **The social layer** (`social_goal` in `dish_brain.c`), run by every strain's
+  rules mind (on the board, the AI model still decides your colony's goals):
+  - **Mobs:** if a real hunter (a predator kind, or a strain with fighting
+    mutations) is within 150 px of a strain this one likes or is allied with,
+    a bold strain goes after the hunter; a timid one guards the victim.
+  - **Feuds:** declared rivals pick fights (bold) or keep clear (timid).
+  - **Visits:** in 20-second turns, a strain visits a friend (feeling above
+    0.1), goes to meet a stranger (curious strains), or minds its own life.
+  - **Feasts:** hungry cells head for the richest food in the dish, so
+    different kinds end up eating side by side.
+- **What you see:** thought lines (dashed lines toward the target), alliance
+  links (green dots with a beating heart), rivalry crackle (red), the
   microscope lens text, and emote bubbles.
+
+**Alliances and rivalries** (`dish_tick`, after meetings):
+
+- Strains whose cells touch warm to each other once per pair per moment:
+  0.004 a second, or 0.012 when one chose to visit the other. Never toward a
+  hunter or something hunting it.
+- Both feelings above 0.35: an **alliance** (moment card, journal). Allies
+  share food on contact (the fuller feeds the hungrier, 0.03 a second) and
+  hearts float between them. It breaks if either feeling drops below 0.15.
+- Both feelings below −0.4: a **rivalry**. Rivals jostle (shove, red sparks)
+  and pick fights. It ends above −0.2.
+- A strain without teeth that "hunts" now shoves: 0.035 health a second and a push.
+- Measured over six 10-minute dishes: about 18 alliances and 8 rivalries an hour,
+  and two kinds of cells touching about 23% of the time.
 
 ---
 
@@ -214,7 +239,9 @@ File: `common/dish_mut.c` (table `MUTS[]`, synergies `SYNS[]`). Effects are in `
 
 ### Drafts
 
-- A pick-of-three every 2 generations (`DISH_DRAFT_GENS`, `dish.h:59`). The dish pauses until you pick.
+- A pick-of-three every 2 generations (`DISH_DRAFT_GENS`), **or on a clock:
+  the first at 45 seconds, then at least every 90 seconds** (`DISH_DRAFT_S`),
+  so a slow colony still evolves. The dish pauses until you pick.
 - Cards that answer the dish's current troubles are 1 + 4× more likely.
 - A pressing trouble always gets at least one card that answers it.
 - Rare cards come up at 0.7× and epic at 0.3× the common rate. Upgrading a card you already own is 1.3× more likely.
@@ -342,6 +369,17 @@ change how the simulation plays out.
 - **Placed items** drop in with a bounce and push cells aside; each then idles
   (crystal pulses, vent glows and bubbles, fountain ripples).
 - **Emote bubbles** pop in big, settle and bob (section 18).
+- **Moment cards** (`moment`, `draw_moment` in `dish_ui.c`): a big card pops
+  in over the dish with a slow sunburst behind it for 2.8 s (`MOMENT_S`),
+  queued up to three. For: synergies, legendary genes, hatchings, alliances,
+  rivalries, a species seen for the first time, the first split, and
+  generations 10, 25, 50 and 100.
+- **Eyes follow your light:** while you hold a finger down, your germs look at it.
+- **Poke boing:** a poked germ squashes and springs back.
+- **Eating:** crumbs of food are pulled into hungry cells on rich food.
+- **Night stars** twinkle in the agar while the lamp is off.
+- **Day/night sweep:** a ring sweeps across the dish from your double-tap.
+- **Egg, legendary looks:** see section 15.
 
 ---
 
@@ -352,8 +390,6 @@ File: `common/dish.c` (`dish_wonder`, `wonder_tick`, around lines 1405–1470).
 - **Timing:** first one after 50–90 seconds, then every 80–150 seconds
   (`dish.c:1455`). At night there's a 50% chance it's glowing plankton.
 - **Food rain:** 9 seconds of falling food drops, about 3 per second.
-- **Air bubble:** rises for up to 34 s and pushes cells aside. Tapping it pops
-  it for +3 DNA and throws nearby cells outward (`dish.c:1439`).
 - **Pollen grain:** 45 seconds, releasing 0.22 food per second while shrinking.
 - **Glowing plankton:** 40 seconds of glowing motes, with cells lit up. Night only.
 - Switching wonders off (as the tests do): set `wonder_cd = 1e9`.
@@ -395,14 +431,16 @@ File: `common/dish_ui.c`.
 - **Double-tap:** day or night.
 - **Tilt (arrow keys, or a phone's motion sensor):** everything drifts downhill.
 - **Tap an emote bubble:** reads what the germ said, and what it's up to.
-- **Tap an air bubble:** pops it (+3 DNA).
 - **Corner buttons:**
   - STORY (top left): the journal and charts.
   - DISH (top right): your strain's card, the Microbe-Dex and badges.
   - WALL (bottom left): draw a barrier that lasts 20 seconds; 3 at most, one more every 12 seconds.
   - SAMPLE (bottom right): the dropper.
 - **The DNA counter (top, "DNA · SHOP"):** opens the shop. While you're
-  placing an item it reads "CANCEL".
+  placing an item it reads "CANCEL". It is the only thing at the top of the
+  screen; the strain's name and mood face are gone.
+- **Corner labels** (STORY, DISH, WALL, SAMPLE) show until you've used that
+  button once, then hide to keep the dish clear.
 - **Web keys:** N lamp, V visitor, F 10× speed, D +50 DNA.
 
 ---
@@ -433,34 +471,41 @@ File: `common/dish_ui.c`.
 
 ## 15. The shop
 
-Files: `common/dish_prog.c` (items and prices at line 131, `dish_shop_buy` at
-line 152), `common/dish_ui.c` (`draw_shop` at line 1248), `common/dish.c`
-(`dish_place_decor` at line 672, and the items' effects in `dish_tick`).
+Files: `common/dish_prog.c` (`SHOP[]`, `dish_shop_buy`), `common/dish_ui.c`
+(`draw_shop`), `common/dish.c` (`dish_place_decor`, `dish_legend_take`, `hatch`).
 
-**Buying:** tap an item once to read what it does ("… TAP AGAIN TO BUY"), and
-again to buy. Items marked "stays" (a small dot) ask you to tap where in the
-dish to put them. Tapping the DNA pill cancels placing.
+Open it by tapping the DNA pill at the top. Two tabs. Tap an item once to read
+what it does ("… TAP AGAIN TO BUY"), and again to buy. Items marked with a dot
+stay; placed items ask where to go. Up to 6 placed items (`DISH_DECOR`).
+
+**DISH tab**
 
 | Item | Cost | What it does |
 |---|---|---|
 | Food drop | 4 | A big drop of food where you tap |
-| Air bubble | 6 | Starts an air-bubble wonder. Pop it for 3 back |
 | Dropper refill | 8 | One more drop for SAMPLE (only when it's empty) |
-| Friend call | 30 | A friendly visitor comes: diatom, symbiont, ciliate, cyano or donor |
-| Rock (stays) | 15 | A mossy rock, 15 px radius. Nothing passes through it: cover from hunters, a breakwater for currents |
-| Glow crystal (stays) | 25 | Light around it (+0.6, about 45 px), day and night; slowly grows food |
-| Warm vent (stays) | 25 | Warmth around it (+0.2 temperature, about 45 px); heat-lovers gather |
-| Food fountain (stays) | 40 | Food bubbles up forever (0.05 a second, never past 0.6) |
-| Gene capsule | 60 | A mutation draft right now |
+| Food rain | 12 | Starts a food-rain wonder |
+| Friend call | 30 | A friendly visitor: diatom, symbiont, ciliate, cyano or donor |
+| Mystery egg | 45 | Place it; it rocks harder and cracks, and hatches after 20 s (`EGG_HATCH_S`) into a rare "golden" organism carrying a ready-made synergy at tier 2. Could be a friend or a foe. Moment card on hatching |
+| Glow crystal (stays) | 25 | Light around it (+0.6, about 45 px), day and night |
+| Warm vent (stays) | 25 | Warmth around it (+0.2 temperature, about 45 px) |
+| Food fountain (stays) | 40 | Food bubbles up forever |
 
-- Up to 6 placed items at once (`DISH_DECOR`). Placing a 7th replaces the oldest.
-- Placed items are saved with the dish.
-- Items that wouldn't do anything right now are greyed out (a bubble already
-  rising, a full dropper, a full dish).
-- **DNA income for comparison:** roughly 5–10 a minute of ordinary play, more
-  with quests, badges, bubbles and shinies.
+**GENES tab**
 
----
+| Item | Cost | What it does |
+|---|---|---|
+| Gene capsule | 60 | A mutation draft now |
+| Rare capsule | 100 | A draft of rare and epic cards only |
+| Blink (legendary) | 120 | A bitten cell teleports 45 px away in a violet flash (4 s recharge per cell) |
+| Giant (legendary) | 120 | Cells 1.5× bigger, 40% tougher, 25% slower, hungrier |
+| Prism (legendary) | 150 | Rainbow rims; feeds on light (even at night, as if lit at 0.3) |
+| Phoenix (legendary) | 180 | 35% of fallen cells are reborn in a burst of fire; embers drift off them |
+| Queen (legendary) | 200 | The oldest cell is crowned: 1.8× size, breeds 2.5× faster, slow; workers stay near her |
+
+- Legendary genes are only in the shop, never in drafts. Each can be bought
+  once per strain (saved). Buying one plays a moment card and a gold ripple.
+- Removed this round: air bubble, rock (old saves' rocks are cleared).
 
 ## 16. Quests and waves
 
@@ -470,7 +515,8 @@ File: `common/dish_quest.c`.
 |---|---|---|---|
 | Light | Shine light on them, 6 units | 40 s | 5 |
 | Grow | Grow by a third, at least 5 cells | 150 s | Line 32 |
-| Herd | Get them into a ring | 60 s | 8 |
+| Night | Turn the lamp off for 10 seconds (only offered by day) | 40 s | 5 |
+| Company | Add a drop of wild water with SAMPLE (only when it has a drop) | 45 s | 5 |
 | Defend | Lose 4 or fewer | 40 s | 10 |
 | Flick | Flick away 3 threats | 40 s | 6 |
 | Wall | Block 40 hits with walls | 45 s | 6 |
@@ -565,8 +611,8 @@ about 9 characters. Lines now mostly appear when tapped, in the explanation bar.
 - **Journal:** keeps the last 96 events: visits, decisions, mutations,
   synergies, policies, shinies, losses, quests (`common/dish_story.c`).
 - **Charts:** the last 120 minutes, sampled once a minute.
-- **Save** (version 9, `dish_save` / `dish_load` in `dish.c`): about 6 KB.
-  Version 9 adds placed items. Older saves still load. New saved fields go at
+- **Save** (version 10, `dish_save` / `dish_load` in `dish.c`): about 6 KB.
+  Version 9 added placed items; version 10 adds legendary genes and hatched rarities. Older saves still load. New saved fields go at
   the end of the file.
 - **Web build:** one WebAssembly file per board shape. Saves are kept in the
   browser's local storage, and time away is lived through on reload.
@@ -614,6 +660,11 @@ about 9 characters. Lines now mostly appear when tapped, in the explanation bar.
   same thing. Consider retiring the gesture hints now the coach covers them.
 - **Placed items can't be moved or sold.** A 7th replaces the oldest; there's
   no way to pick one up.
+- **Social balance.** Alliances and rivalries are tuned by the 0.35 / −0.4
+  thresholds and the familiarity rates in `dish_tick`; mobs only form against
+  real hunters within 150 px (`social_goal`).
+- **Legendary genes are permanent for the run** and stack (a giant phoenix
+  queen is possible). Worth watching for balance once players save up DNA.
 - **Shop food earns care DNA.** Buying food for a hungry colony can trigger the
   2-DNA "good care" reward, so it costs 2 instead of 4 now and then.
 - **Firmware not built.** The changes pass every selftest, but the board
@@ -623,4 +674,5 @@ about 9 characters. Lines now mostly appear when tapped, in the explanation bar.
 - **Desktop simulator key.** `sim/dish_main.c` still has `O` for a virus
   outbreak; the web build uses `V` for a visitor.
 - **Unattended play.** In the selftest that plays 30 runs of 20 minutes with
-  no player input, 3 runs die out, the same as before these changes.
+  no player input, no runs die out now (3 before), helped by the more frequent
+  mutation cards.
