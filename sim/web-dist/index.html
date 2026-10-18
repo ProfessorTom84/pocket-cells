@@ -74,6 +74,12 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
 .keys { display: grid; gap: 8px; }
 .keys div { display: flex; align-items: center; gap: 10px; color: var(--ink); }
 .status { font: 400 12px/1.5 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats { display: grid; gap: 6px; margin-top: 8px; font: 400 12px/1.3 var(--mono); color: var(--muted); }
+.stats .row { display: grid; grid-template-columns: 10px 1fr 34px 58px; gap: 8px; align-items: center; }
+.stats .dot { width: 10px; height: 10px; border-radius: 50%; }
+.stats .bar { height: 4px; border-radius: 2px; background: var(--glow); grid-column: 2 / 5; opacity: 0.6; }
+.stats .name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats .up { color: #4cf08c; } .stats .down { color: #ff8a8a; }
 .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #ffb3c0; font-size: 14px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -108,6 +114,11 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
         <button class="btn warn" id="reset-yes">Wipe it</button>
         <button class="btn" id="reset-no">Keep it</button>
       </div>
+    </div>
+    <div>
+      <h2>Live stats</h2>
+      <canvas id="spark" width="280" height="56" aria-label="Cells in the dish over the last few minutes" style="width:100%;height:56px;display:block"></canvas>
+      <div id="stats" class="stats" aria-live="off"></div>
     </div>
     <div>
       <h2>On the glass</h2>
@@ -230,6 +241,35 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
   function tilt() { if (M) M._web_tilt(((arrows.ArrowRight || 0) - (arrows.ArrowLeft || 0)) * 0.8, ((arrows.ArrowDown || 0) - (arrows.ArrowUp || 0)) * 0.8); }
   document.addEventListener("keyup", e => { if (e.key.startsWith("Arrow")) { arrows[e.key] = 0; tilt(); } });
   window.addEventListener("blur", () => { for (const k in arrows) arrows[k] = 0; tilt(); });
+
+  /* ---- the live stats card: read from the module once a second ---- */
+  const SPECIES = ["coccus","bacillus","spirillum","cyano","myxo","phage","mold","vibrio","lacto","halophile","symbiont","ciliate","donor","amoeba","diatom","rotifer"];
+  const CAUSES = ["hunger","hunters","a virus","poison","a harsh dish","old age","sacrifice"];
+  const statsEl = document.getElementById("stats"), spark = document.getElementById("spark"), sctx = spark.getContext("2d");
+  const hist = [];
+  function hsl(h) { return "hsl(" + Math.round(h * 360) + ",70%,65%)"; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+  function showStats() {
+    if (!M || !M._web_stats) return;
+    const p = M._web_stats() >> 2, n = M.HEAP32[p], v = M.HEAP32.subarray(p + 1, p + 1 + n);
+    if (n < 6) return;
+    hist.push(v[0]); if (hist.length > 180) hist.shift();
+    const rows = [], max = Math.max(1, ...Array.from({ length: v[5] }, (_, r) => v[6 + r * 5 + 2]));
+    for (let r = 0; r < v[5]; r++) {
+      const q = v.subarray(6 + r * 5, 11 + r * 5), name = q[1] ? "your strain" : SPECIES[q[0]] || "?", d = q[3];
+      rows.push('<div class="row"><span class="dot" style="background:' + hsl(q[4] / 1000) + '"></span><span class="name">' + esc(name) + '</span><span>' + q[2] +
+                '</span><span class="' + (d > 0 ? "up" : d < 0 ? "down" : "") + '">' + (d > 0 ? "+" : "") + d + '/min</span>' +
+                '<span class="bar" style="width:' + Math.round(100 * q[2] / max) + '%;background:' + hsl(q[4] / 1000) + '"></span></div>');
+    }
+    statsEl.innerHTML = '<div>' + v[0] + ' cells in the dish</div>' + rows.join("") +
+      '<div>born ' + v[1] + '/min · died ' + v[2] + '/min' + (v[4] >= 0 ? ' (mostly ' + CAUSES[v[4]] + ')' : '') + '</div><div>DNA +' + v[3] + '/min</div>';
+    const W = spark.width, H = spark.height, top = Math.max(10, ...hist);
+    sctx.clearRect(0, 0, W, H);
+    sctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--glow"); sctx.lineWidth = 2; sctx.beginPath();
+    hist.forEach((c, i) => { const x = i * W / 179, y = H - 4 - (H - 8) * c / top; i ? sctx.lineTo(x, y) : sctx.moveTo(x, y); });
+    sctx.stroke();
+  }
+  setInterval(showStats, 1000);
 
   /* ---- a new dish, confirmed on the page ---- */
   const confirmEl = document.getElementById("confirm");
