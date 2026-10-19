@@ -119,6 +119,7 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
       <h2>Live stats</h2>
       <canvas id="spark" width="280" height="56" aria-label="Cells in the dish over the last few minutes" style="width:100%;height:56px;display:block"></canvas>
       <div id="stats" class="stats" aria-live="off"></div>
+      <div id="ai" class="stats" style="margin-top:10px">AI model: loading...</div>
     </div>
     <div>
       <h2>On the glass</h2>
@@ -242,6 +243,61 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
   document.addEventListener("keyup", e => { if (e.key.startsWith("Arrow")) { arrows[e.key] = 0; tilt(); } });
   window.addEventListener("blur", () => { for (const k in arrows) arrows[k] = 0; tilt(); });
 
+  /* ---- the AI model: every colony's mind. It lives in a worker (so a decision never stalls a frame): the page
+     downloads the model once, passes each colony's situation line to it, and hands the answers back ---- */
+  const aiEl = document.getElementById("ai");
+  let mind = null, mindReady = false, mindBusy = false, mindMs = 0, mindN = 0;
+  function mindPost(line, ticket, mod) {
+    mindBusy = true;
+    mind.post({ type: "infer", line, ticket }, a => {
+      mindBusy = false; mindN++; mindMs += a.ms;
+      if (M === mod && a.goal >= 0) M._web_mind_answer(a.ticket, a.goal, a.urgency, a.conf);   /* (a board switched meanwhile: dropped) */
+    });
+  }
+  function mindPump() {
+    if (!mindReady || mindBusy || !M || !M._web_mind_next) return;
+    const t = M._web_mind_next();
+    if (t >= 0) mindPost(M.UTF8ToString(M._web_mind_line()), t, M);
+  }
+  function mindShow() {
+    if (!mindReady) return;
+    let txt = "AI model: thinking for every colony";
+    if (M && M._web_mind_info) {
+      const p = M._web_mind_info() >> 2, v = M.HEAP32.subarray(p, p + 5);
+      txt += " · " + v[2] + " decisions by the model, " + v[3] + " reflexes";
+    }
+    if (mindN) txt += " · " + Math.round(mindMs / mindN) + " ms a thought";
+    aiEl.textContent = txt;
+  }
+  async function mindStart() {
+    try {
+      const [model, tok] = await Promise.all(["model_q4.bin", "tokenizer.bin"].map(f => fetch(f).then(r => { if (!r.ok) throw new Error(f + " " + r.status); return r.arrayBuffer(); })));
+      let waiting = null;
+      const ready = ok => { mindReady = ok; aiEl.textContent = ok ? "AI model: ready" : "AI model: could not start (the colonies use simple rules)"; if (ok && M) M._web_mind_on(1); };
+      try {                                          /* a worker, if the page may have one */
+        const w = new Worker("mind-worker.js");
+        w.onmessage = e => { if (e.data.type === "ready") ready(e.data.ok); else if (waiting) { const f = waiting; waiting = null; f(e.data); } };
+        w.onerror = () => { if (!mindReady) mainThread(model, tok); };
+        mind = { post: (m, cb) => { waiting = cb; w.postMessage(m); } };
+        w.postMessage({ type: "open", model, tok }, []);
+      } catch (e) { mainThread(model, tok); }
+      async function mainThread(model, tok) {         /* no worker: the same model on the page itself, between frames */
+        await loadScript("mind.js");
+        const MM = await createMind();
+        const put = b => { const p = MM._mind_alloc(b.byteLength); MM.HEAPU8.set(new Uint8Array(b), p); return p; };
+        const ok = MM._mind_open(put(model), model.byteLength, put(tok), tok.byteLength) > 0;
+        mind = { post: (m, cb) => setTimeout(() => {
+          const t0 = performance.now(), n = MM.lengthBytesUTF8(m.line) + 1, p = MM._mind_alloc(n);
+          MM.stringToUTF8(m.line, p, n); const r = MM._mind_infer(p) >> 2, o = MM.HEAP32.subarray(r, r + 3); MM._free(p);
+          cb({ ticket: m.ticket, goal: o[0], urgency: o[1], conf: o[2], ms: performance.now() - t0 });
+        }, 0) };
+        ready(ok);
+      }
+    } catch (e) { aiEl.textContent = "AI model: could not load (" + e.message + "); the colonies use simple rules"; }
+  }
+  setInterval(mindPump, 40);
+  setInterval(mindShow, 1000);
+
   /* ---- the live stats card: read from the module once a second ---- */
   const SPECIES = ["coccus","bacillus","spirillum","cyano","myxo","phage","mold","vibrio","lacto","halophile","symbiont","ciliate","donor","amoeba","diatom","rotifer"];
   const CAUSES = ["hunger","hunters","a virus","poison","a harsh dish","old age","sacrifice"];
@@ -311,6 +367,7 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
         len = bin.length; away = Math.max(0, (Date.now() - saved.at) / 1000);
       }
       M._web_init((Math.random() * 4294967295) >>> 0, len, away);
+      if (mindReady) M._web_mind_on(1);
       syncFast();
       statusEl.textContent = saved ? "The " + NAMES[b] + "'s dish, back after " + fmtAway(away) + " away." : "A new dish on the " + NAMES[b] + ": the setup is on the glass.";
       try { localStorage.setItem("pocketdish.board", b); } catch (e) {}
@@ -330,6 +387,7 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
   let first = "rect"; try { first = localStorage.getItem("pocketdish.board") || "rect"; } catch (e) {}
   if (!BOARDS[first]) first = "rect";
   start(first);
+  mindStart();
 })();
 </script>
 
