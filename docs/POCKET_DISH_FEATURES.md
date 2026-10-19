@@ -33,6 +33,7 @@ Line numbers are as of commit `baac2ac`; where code moved since (latest commit `
 21. [Known gaps and open questions](#21-known-gaps-and-open-questions)
 22. [Generations](#22-generations)
 23. [Status labels, stats and the director](#23-status-labels-stats-and-the-director)
+24. [Coming back](#24-coming-back)
 
 ---
 
@@ -738,6 +739,26 @@ Files: `common/dish_talk.c` (lines), `common/dish_ui.c` (bubbles, `bubble_put` a
 - **Text bubbles** (words, no emoji) only when a germ answers you directly: a
   poke, a flick, a shiny found.
 
+**What a poked germ says** (`dish_poke_text` in `dish_talk.c`): it talks about
+what is true for that one cell right now, chosen by how much it matters:
+- **About itself:** it was just born, it is splitting, it is a mutant ("I'M DIFFERENT. I'VE GOT SPIKES!"), a gene it carries.
+- **How it feels:** asleep through harm, infected, bitten, poisoned, weak, starving, stuffed.
+- **What's around it:** a colony hunting it, prey it is chasing, friends, rivals, strangers.
+- **What you are doing:** your light, a current, a tilt, night.
+- **Where it sits:** crowded or alone.
+- **Its family:** its age and generation, how many of them there are.
+- **Its colony:** what its mind (the AI model) just decided.
+- **News:** something that just happened in the dish (a mutant, a gene taking over, a newcomer, a hatching).
+- **Who it is:** its temper, a legend, being the queen, being shiny.
+- **You:** a greeting after you've been away, and gentle replies when you keep poking.
+
+Each fact has three to five phrasings, about 150 lines in all. A germ never says
+the same fact twice within its last four pokes, and avoids the last 24 lines
+anyone heard. Its voice sometimes opens the line ("OH, HI!", "HMPH."), never
+before sad or urgent news. The test pokes 48 germs in 8 different situations and
+gets 35–41 different lines, none repeated back to back, all inside the board's
+font and bubble size.
+
 **How often they talk:**
 
 - Your colony speaks its mind every 32 ± 10 seconds (`dish_ui.c:436`).
@@ -919,3 +940,51 @@ Files: `common/dish_mut.c` (`dish_mut_take`), `common/dish.c` (`cell_tick`, `cen
 
 - A "SURPRISE!" moment card says what it is. An idle keeper gets none.
 - This is the game's own rules reading engagement and the dish's state, not the AI model.
+
+---
+
+## 24. Coming back
+
+Files: `common/dish.c` (`dish_sleep`), `common/dish_ui.c` (`draw_away`, the `PAGE_AWAY` tap), `firmware/main/dish_app.c` (idle).
+
+**Being away never kills.**
+- **Time-lapse:** when the dish wakes, it first lives a few minutes on its own
+  (2% of the time away, from 1 to 3 minutes, about 0.13 s on a Mac). Sounds and
+  on-screen news are held back; the story journal records it.
+  - Your colony is sheltered: cells can die, the colony can't. The lapse stops
+    early if it falls under 4 cells.
+  - No quests or waves run while nobody is there.
+- **Stasis for the rest:** cells get hungrier with time (up to half their food
+  over a day or more) but never fall below a quarter. A long absence ends
+  hungry, never dead.
+- **Visitors** whose time ran out have left.
+
+**Something always waits.**
+- **Keeper mode:** after an hour or more away, a mutation card is waiting.
+- **Observer mode:** a long absence brings up to three extra mutants (one per two hours).
+- **A surprise after 2+ hours away** (an egg most often after 6 hours):
+  - an egg about to hatch a few seconds after you look
+  - a shiny germ to find
+  - a feast
+  - a visitor arriving at the glass
+
+**The return.**
+- **The "While you were away" card** comes first after 10 minutes or more away,
+  while the dish waits. It shows how long you were gone, the surprise (in gold),
+  a waiting card, mutants, a gene that took over or a new synergy, a legend,
+  births, arrivals and departures, and "THEY'RE HUNGRY. SHINE A LIGHT ON THEM!"
+  when they are.
+- **SEE THEM:** the colony greets you in words ("YOU'RE BACK! WE MISSED YOU.")
+  for 45 seconds after the card. In keeper mode, a hungry colony asks for light
+  (a light quest, 5 DNA), then the waiting card.
+
+**Naps on the board** (`IDLE_*` in `dish_app.c`).
+- **Dim:** after 60 s untouched the screen drops to 30% brightness.
+- **Nap:** after 3 minutes (10 in observer mode) a "NAP TIME" card shows for
+  3 s, then the board saves and powers off.
+- **Staying awake:** a touch, a press or tilting the box cancels it. It never
+  naps on the cable.
+- **Waking:** the next press is a cold boot, and the dish lives through the time
+  away as above. Boards without a clock can't measure the time, so they wake as
+  they slept.
+
