@@ -286,95 +286,158 @@ also gets a toast and a journal entry.
 
 ## 7. Mutations and synergies
 
-File: `common/dish_mut.c` (table `MUTS[]`, synergies `SYNS[]`). Effects are in `common/dish.c`.
+Files: `common/dish_mut.c` (the table `MUTS[]`, the pairings `SYNS[]`, how genes are dealt and picked),
+`common/dish.c` (what each gene does), `common/dish_render.c` (`draw_muts`: how each one looks).
 
-### Drafts
+### Genes live in the cells
 
-- A pick-of-three every 2 generations (`DISH_DRAFT_GENS`), **or on a clock:
-  the first at 45 seconds, then at least every 90 seconds** (`DISH_DRAFT_S`),
-  so a slow colony still evolves. The dish pauses until you pick.
-- Cards that answer the dish's current troubles are 1 + 4× more likely.
-- A pressing trouble always gets at least one card that answers it.
-- Rare cards come up at 0.7× and epic at 0.3× the common rate. Upgrading a card you already own is 1.3× more likely.
-- Each mutation has 3 tiers.
-- **Troubles the draft responds to:** hunters, virus, medicine, acid, salt, hunger, darkness, crowding, rivals.
-- **Evolving is visible:** when a mutation is taken, a ripple runs out from
-  the colony's middle and every cell boings (section 10).
+- **Every cell carries its own genes** (`cell_t.mut`: a tier 0–3 for each of the 31 mutations).
+  A daughter copies her mother's.
+- **The colony's build** (`strain_t.mut`, what the card, the name and the AI see) is each gene at
+  the highest tier **a third of the cells carry**. A gene that is already in the build stays
+  until fewer than a fifth carry it. When a gene enters or leaves the build, the story and (in
+  observer mode) a toast say "X TOOK OVER" or "X FADED OUT".
+- **The card shows how much of the colony carries each gene** (the % beside it).
+- Older saves (version 11 and before) load with their genes renamed (Zap → Nanowires,
+  Virus Tamer → CRISPR, Scouts → Chemotaxis, Grapple → Pili, Quorum → Choir).
+  Engulf becomes the Devourer legendary. Mimicry is gone.
 
-### The 16 mutations
+### Two ways to evolve
 
-Numbers are per tier.
+**Keeper mode (you pick):**
+- A pick-of-three every 2 generations (`DISH_DRAFT_GENS`), or on a clock: the first at
+  45 seconds, then at least every 90 seconds (`DISH_DRAFT_S`). The dish pauses until you pick.
+- Cards that answer the dish's current troubles are 1 + 4× more likely. A pressing trouble
+  always gets at least one answer.
+- Rare cards come up at 0.7×, epic at 0.3×. Upgrading a gene you already have is 1.3× likelier.
+- **At most one behaviour card in each hand**, and never both poles of one axis.
+- **The new generation carries the pick:** the youngest two in five cells get it at once, and
+  every cell born afterwards gets it too (section 22).
 
-| Mutation | What it does | Where in `dish.c` |
-|---|---|---|
-| Spikes | Touching it hurts attackers 0.06 health per second | 1009 |
-| Toxin cloud | A haze hurting nearby cells 0.03 per second; range +6 px per tier | 1010 |
-| Zap | Every 7.5 − 1.5 s: stuns and hurts strangers within 30 + 10 px | 1323 |
-| Jet | Short bursts of speed away from danger | `case ST_FLEE` in `cell_tick` |
-| Engulf | Swallows smaller cells whole (0.6 chance per second); +0.35 energy | 1019 |
-| Swarm mind | The colony swims as one school | `M_SWARM` in `cell_tick` |
-| Biofilm wall | 12% of cells become anchors that soak up harm | `is_anchor` |
-| Sunlight | Light feeds it (+0.005 per tier) | `M_PHOTO` in `cell_tick` |
-| Glow lure | Pulls strangers in from 80 + 30 px | 932 |
-| Spore burst | A dying cell leaves spores that hatch in 15–25 s | `kill` |
-| Virus tamer | 30% chance per tier to turn a virus to its side | `M_TAMER` in `cell_tick` |
-| Mimicry | Hunters' bites do 25% less per tier; viruses miss more | `bite_k` |
-| Scouts | 6% of cells per tier roam and mark food for the colony | `is_scout` |
-| Grapple | Latches on, drains and drags prey home | 1035 |
-| Symbiosis | Friends stay and share; at tier 3 they give free mutations | `M_SYMBIOSIS` in `cell_tick` |
-| Quorum bloom | At 45 − 5 cells, a 12-second boom in splitting every 80 − 15 s | 1369 |
+**Observer mode (the dish decides):**
+- Chosen on the title page (KEEPER / OBSERVER), switchable any time from the pill on the strain card.
+  Saved, and kept across runs.
+- **No cards, no requests, no waves.** Gene capsules in the shop make a mutant instead of
+  dealing a card. When a run ends, a new dish starts by itself after 12 seconds.
+- **Mutants are born at division:** a daughter has a `MUTANT_P` (0.06) chance to be a mutant.
+  The chance is up to 2.5× higher when the colony is uncomfortable or hurt, and 3× under the UV lamp.
+  Resting cells mutate too (`MUTANT_BG`, 0.0002 a second, more under stress), so a colony that
+  has stopped growing still evolves.
+- **Which gene a mutant gets** is weighted the same way as cards: by what answers the colony's
+  troubles now, and by rarity. Behaviour genes come 0.6× as often as body genes.
+- **Genes spread sideways:** touching sister cells pass a gene across (`HGT_P`, 0.004 per gene
+  per second), 3× faster for a gene that answers a current trouble and up to 7× faster with
+  Plasmid Swap. This is what lets a useful mutant take over in a few minutes.
+- **Genome room:** a cell holds at most `GENOME_ROOM` (5) different genes. A new one pushes out
+  the least useful.
+- **Genes that answer nothing fade:** now and then a cell drops a tier of a gene that does not
+  help against anything happening now. A daughter can also lose a gene outright (35% of the
+  mutant chance).
+- **Legendaries can be born:** 1.2% of mutant events in observer mode turn the whole colony
+  legendary instead.
+- A 20-minute observer run in the tests gives 20–45 mutants, 8–11 genes taking over and 2–4
+  synergies (`--selftest-observe`).
+- **Mutant animation:** a DNA double helix rises off the cell in the gene's colour, with a
+  flash and stars. For three seconds a rainbow ring circles it. Your mutants say "I'M A MUTANT!"
+  (at most one every 8 seconds).
 
-### Every mutation has a cost
+### Troubles (pressures)
 
-Shown in red on its draft card. Each mutation's `cost` and body `tint` are in `MUTS[]`.
+Hunters, virus, medicine, acid, salt, hunger, darkness, crowding, rivals (`dish_pressures_of`).
+Each gene lists the troubles it answers. Keeper cards and observer mutants both lean toward them.
 
-| Mutation | Cost |
-|---|---|
-| Spikes | Pricks its own cells when packed (0.012 health a second per tier) |
-| Toxin cloud | Spoils its own food (1% a second per tier) |
-| Zap | Each zap costs every cell in the colony 0.02 energy |
-| Jet | Each jet costs 0.06 energy |
-| Engulf | Stunned for 1 s while digesting |
-| Swarm mind | Infection passes between touching cells of the school |
-| Biofilm wall | Anchors trap waste around them |
-| Sunlight | 25% hungrier per tier at night |
-| Glow lure | Lures viruses in too |
-| Spore burst | Spores hatch with 0.25 energy |
-| Virus tamer | A tamed virus has a 1%-a-second chance to go wild again |
-| Mimicry | 5% slower per tier |
-| Scouts | Scouts lose health when more than 120 px from home |
-| Grapple | A cell holding prey is slowed |
-| Symbiosis | Gives energy to friends it touches |
-| Quorum bloom | Every cell loses 0.15 energy when a bloom ends |
+### The 21 body genes
 
-### How they look
+Numbers are per tier unless stated.
 
-The strongest mutation tints the whole body toward its colour (14% + 12% per
-tier). Signature features: spines with red tips, a green haze with drips,
-crackling sparks, twin jet nozzles, a red maw, swept-back fins, a slime coat,
-green chloroplasts, an antenna with a glowing orb, spore pods, orbiting virus
-hexagons, mottled camouflage, twitching antennae, hooked pili, pink heart spots,
-a breathing yellow ring.
+| Gene | Role | Rarity | What it does | Its cost | How it looks |
+|---|---|---|---|---|---|
+| Spikes | Attack | Common | Touching it hurts attackers 0.06/s | Pricks its own when packed | Spines that flare white when it bites |
+| Toxin Cloud | Attack | Rare | A haze hurting strangers 0.03/s, wider each tier | Spoils its own food | A bubbling green haze, drips |
+| Nanowires | Attack | Rare | Wires share food between touching wired cells; from tier 2 the line shocks strangers (the old Zap) | Each shock costs the wired 0.02 energy | Copper terminals, sparks; live wires drawn between wired sisters with food sparks running along them |
+| Pili | Attack | Common | Hooks latch on and drain (tether); from tier 2 it twitches along in jerks | Holding slows it | Hooked hairs that flick |
+| Biofilm Wall | Defence | Rare | 12% of cells become anchors that soak up harm | Traps its waste | A slime coat with beads |
+| Persisters | Defence | Common | 12% of cells fall asleep at the first harm: 90% less damage (97% at tier 3); wake when it's calm | Sleepers don't eat or grow | Frost crosses; asleep, an ice shell with a slow heartbeat; the frost cracks off as it wakes |
+| Spore Burst | Defence | Rare | A dying cell leaves 1–3 spores | Spores wake weak | Spore pods |
+| CRISPR | Defence | Rare | Remembers viruses that infected it: later ones are cut apart (snip!). At tier 3 viruses join it | Memory costs 5% more food | A barcode of stripes; tier 3: orbiting virus hexagons |
+| Sunlight | Food | Common | Light feeds it | 25% hungrier at night | Chloroplasts that glint in the light |
+| Glow Lure | Food | Rare | Draws strangers in from 80 + 30 px (any colony can have it now) | Draws viruses | An antenna with a pulsing orb |
+| Chemotaxis | Food | Common | 6% of cells are scouts; they leave a scent trail and the colony follows it to food | Scouts get lost far from home | Twitching feelers puffing scent rings; yellow scent marks on the agar |
+| Cheater | Food | Rare | Siphons energy from foreign cells it touches (0.03/s); tier 2+ unnoticed | Eats 20% worse on its own | A purple siphon with stolen crumbs sliding in |
+| Jet | Movement | Common | Bursts away from danger | Each jet burns 0.06 energy | Twin nozzles, a plume |
+| Swarm Mind | Movement | Common | Swims as one school | Colds spread through the school | Swept fins, a wake |
+| Magnetotaxis | Movement | Rare | Steers toward the tilt (north when level); tier 2 chains, tier 3 resists currents | Pulled north when the dish is level | A chain of magnetosomes with a red end; dark links between chained cells |
+| Gas Vesicles | Movement | Common | Rides currents 40% further, slides 25% less with the tilt; tier 2 rides currents toward food | Strong currents scatter it | Bubbles rising inside; it bobs |
+| Symbiosis | Social | Rare | Friends stay and share; tier 3 they give free genes | Gives food away | Pink heart spots |
+| Quorum Choir | Social | Rare | Once 12+ cells, all singers pulse on one beat; tier 2 blooms; tier 3 the song stuns strangers near | Crashes after a bloom | A ring breathing out on the shared beat; music notes |
+| Plasmid Swap | Social | Epic | Passes its genes to other strains it touches; tier 2 takes one back | Rivals catch its genes | Little DNA rings circling inside; a bridge with a bead sliding across |
+| Startle | Social | Common | A poke or a rap nearby makes it flash and scatter; tier 2 remembers where danger was; tier 3 bites what touches it while startled | Startles at nothing now and then | A false eye on its back; a white flash ring |
+| Day Clock | Social | Common | Splits faster by day; slower, safer and thriftier by night | A day-night flip (double-tap) leaves it reeling for 3 s | A clock face with a turning hand; a sun or a moon |
 
-### The 8 synergies
+### The 10 behaviour genes (5 axes)
 
-Any tier of both parts counts. Each is announced the first time, and the card
-that would complete one glows gold. The colony's name changes to the synergy's.
+Each axis is a pair of opposite poles. A cell carries only one pole: gaining the other first
+wears the one it has down. Behaviour genes move the colony's temperament and what it tells the
+AI (stress, boldness, sociability, curiosity), so **the model decides what a hothead does**.
 
-| Synergy | Parts | Effect |
-|---|---|---|
-| Storm School | Zap + Swarm | Each zap jumps on to one more stranger within 45 px |
-| Angler | Lure + Engulf | Lure reaches +60 px and pulls 1.5× harder; swallows lured prey without hunting |
-| Smog Trail | Toxin + Jet | Jetting leaves poison, 0.25 health per second within 30 px |
-| Battering Ram | Spikes + Jet | Jetting into enemies does 1.2 per second, knocks them back and stuns |
-| Solar Reef | Sunlight + Biofilm | Anchor cells grow green spires that make food in light |
-| Spore Bombs | Spore burst + Toxin | A fallen cell bursts, hurting strangers within 35 px by 0.35 (`dish.c:575`) |
-| Siren | Mimicry + Lure | Takes on the nearest enemy's colour; bites do another 40% less, viruses miss 20% more |
-| Murmuration | Swarm + Quorum | The school wheels in a spiral, 20% faster, with a rainbow wake |
+| Gene | What it does | Its cost | How it looks |
+|---|---|---|---|
+| Pacifist | Never starts fights; others warm to it; its blows are 30% softer; tier 3 hunters lose interest | Can't fight back | A floating halo, a soft calm glow |
+| Hothead | Bites anything it touches; meets strangers with a fight; tier 3 charges them | Everyone dislikes it | A throbbing red rim, flush and steam; angry brows |
+| Couch Potato | 15% less hunger and 15% slower per tier; lives longer; a model "burst" becomes a nap | Grows slowly | Z's drifting up; heavy lids |
+| Speed Freak | 20% hungrier, 15% faster, splits sooner; can't sit still | Ages 15% faster | Speed lines; it jitters |
+| Hermit | Keeps its distance from sisters; curious; tier 3 a colony of loners | Alone it's easier prey | A violet hood; a dotted ring of personal space |
+| Clingy | Huddles; takes 6% less harm when touching sisters | Crowds, and colds spread | Little arms reaching for the colony |
+| Reckless | Reports 25% less danger to the AI; flees less; faster | Takes 8% more harm | A flame tuft licking up |
+| Skittish | Reports more danger; bolts from any hunter near it, whatever the AI says | Eats 10% worse | Sweat beads on both sides; it trembles; worried brows |
+| Sharer | Feeds hungry sisters it touches (tier 2: allies too) | The full go hungry | Holds out a green crumb |
+| Cannibal | Eats weaker sisters when hungry; tier 2 the dying; tier 3 smaller strangers | The whole dish fears it | Fangs and a red drip; angry brows |
 
-Adding a synergy: add an entry to the `SYN_*` list in `dish_mut.h` and to
-`SYNS[]` in `dish_mut.c`, then write its behaviour in `dish.c` (check
-`g_syn[strain] >> SYN_X & 1`) and its look in `draw_muts` in `dish_render.c`.
+### The 22 synergies
+
+Any tier of both parts counts. Each is announced the first time with a moment card. A card that
+would complete one glows gold, and the colony's name changes to the synergy's.
+
+| Synergy | Parts | Effect | Look |
+|---|---|---|---|
+| Storm School | Nanowires + Swarm | Each shock jumps to the next stranger | A spark circling |
+| Angler | Lure + Pili | Lure +60 px and pulls harder; hooked prey reeled in 1.5× faster | A bait on a stalk |
+| Smog Trail | Toxin + Jet | Jets leave poison | — |
+| Battering Ram | Spikes + Jet | Rams knock enemies back and stun them | A red glow at the front while jetting |
+| Solar Reef | Sunlight + Biofilm | Anchors grow food-making spires | Green spires |
+| Spore Bombs | Spore Burst + Toxin | A fallen cell bursts in poison | A pulsing green core |
+| Siren | Lure + Cheater | Wears its enemy's colours; bites on it do 40% less | Its colours shift |
+| Murmuration | Swarm + Choir | The school wheels in a spiral | A rainbow wake |
+| Compass School | Magnetotaxis + Swarm | The school turns to the tilt as one, 20% faster | An arrowhead wake |
+| Power Grid | Nanowires + Biofilm | Every wired cell shares one food store | Lit nodes round the wall |
+| Light Show | Choir + Lure | Each beat draws strangers in and stuns them | A rainbow flash on the beat |
+| Gene Market | Plasmid + Symbiosis | Genes trade both ways with allies, 3× as often | A gold bead going round |
+| Ghost Fleet | Gas Vesicles + Persisters | Sleepers drift twice as far on currents and wake far away | A pale ghost-light while asleep |
+| Sundial | Day Clock + Sunlight | Light feeds it 1.5× by day; half the harm at night | A gnomon's shadow |
+| Sentinels | Startle + Spikes | A startled cell's spines hurt double | A red alarm ring |
+| Vampire | Cheater + Pili | Hooks drink twice as deep, and no one minds | A blood-red mouth |
+| Berserker | Hothead + Spikes | Spikes hurt 1.5×; charges 25% faster | A pulsing rage aura |
+| Sunbather | Couch Potato + Sunlight | Light feeds it 1.4×; 30% less hunger in light | Sunglasses |
+| Bullet | Speed Freak + Jet | Jets recharge 2.5× faster | A long tracer |
+| Grim Harvest | Cannibal + Spore Burst | Eaten sisters come back as spores | A little soul rising |
+| Cuddle Puddle | Clingy + Symbiosis | Touching sisters heal | Hearts floating up |
+| Hermit Crab | Hermit + Biofilm | A lone cell takes 40% less harm | A borrowed shell |
+
+### Legendaries
+
+Bought in the GENES tab of the shop, or (observer mode) born as a rare mutant: Blink, Giant,
+Prism, Phoenix, Queen, and **Devourer** (220 DNA; the old Engulf: a great red maw that swallows
+smaller germs whole). **Phoenix** cells reborn in fire now rise as mutants.
+
+### Adding a gene
+
+1. Add it to the enum in `dish_mut.h` (body genes before `M_BEHAVE`; behaviour poles in pairs).
+2. Add a row to `MUTS[]` and bump `DISH_MUT_N` in `dish.h`.
+3. Write what it does in `dish.c` (the cell's own genes are `mu` in `cell_tick`).
+4. Write how it looks in `draw_muts`.
+5. Add a check to `selftest_verbs` in `sim/dish_main.c`. Every gene has one, measured against
+   the same dish without it.
+6. Saves keep genes by index: append, don't reorder.
 
 ---
 
@@ -532,23 +595,13 @@ File: `common/dish_ui.c`.
 
 File: `common/dish_ui.c`.
 
-- **The coach** (`draw_coach` at line 1274; timing at line 469): when you've
-  been idle for 7 seconds (18 seconds once you've tried holding for light), a
-  translucent ghost finger performs a gesture you haven't tried yet, on the
-  real target, with a caption in the explanation bar pointing at it. Order:
-  hold for light, tap a germ, drag a current, SAMPLE, SHOP, flick, double-tap,
-  WALL. SAMPLE is only shown when the dropper has a drop; SHOP when you can
-  afford something. Touching the screen dismisses it.
-- **Tried gestures** are remembered in the save (`TRY_*` bits in `d->hints`),
-  so the coach never repeats something you've done.
-- **NEW tags:** a bouncing gold "NEW" and a soft glow on SAMPLE (while it has a
-  drop and you haven't used it), on WALL (after the first minute, until used),
-  and on the shop pill (until opened, once you have 4 DNA).
+- **No tutorial.** The tips page, the first-time hint popups, the ghost-finger coach and the
+  NEW tags are gone: a returning player doesn't need them. (The web page's side panel still
+  lists the controls, outside the dish.)
+- **Corner buttons are labelled** until each has been used once (`TRY_*` bits in `d->hints`, saved).
 - **The shop pill glows gold** whenever something in it is affordable and useful right now.
-- **First-use explanations:** the first SAMPLE tells you to watch the edge;
-  WALL explains drawing; the shop shows what each item does on the first tap.
-- **Older first-time hints** still appear for visitors, quests, waves, the
-  STORY and DISH buttons, tilting, shinies and bubbles (`hints_tick`).
+- **Tapping things explains them:** a germ (it answers, and the lens shows it), a bubble (who
+  said it), a placed item (what it does), the stats chip, a shop item (first tap reads it out).
 
 ---
 
