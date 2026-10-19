@@ -4,7 +4,7 @@ Every system in the game, what it does, and the value to change to tune it.
 
 **Where the code is:** the `dish` branch of `pocket-cells_vF`, checked out at
 `~/Documents/GitHub/pocket-dish-work`. Paths below are relative to that checkout.
-Line numbers are as of commit `baac2ac`; where code moved in `4f0cf74`, sections name the function instead. "Knob" means the value to change.
+Line numbers are as of commit `baac2ac`; where code moved since (latest commit `191ccc1`), sections name the function instead. "Knob" means the value to change.
 
 ---
 
@@ -31,6 +31,8 @@ Line numbers are as of commit `baac2ac`; where code moved in `4f0cf74`, sections
 19. [Story, save, web build](#19-story-save-web-build)
 20. [Good first knobs to try](#20-good-first-knobs-to-try)
 21. [Known gaps and open questions](#21-known-gaps-and-open-questions)
+22. [Generations](#22-generations)
+23. [Status labels, stats and the director](#23-status-labels-stats-and-the-director)
 
 ---
 
@@ -79,6 +81,14 @@ Files: `common/dish.h:50–59`, `common/dish.c`.
   - Salt: halophile visitors push it salty; it drifts back once they leave.
 - **Light:** the lamp (day), your held finger, and glow crystals (`dish_light_at`).
 - **Day and night:** double-tap the dish to switch. Night dims everything and cools it slightly.
+- **Stirring:** a finger's current reaches about 42 px around the stroke and
+  carries cells at 1.1× its speed (anchored wall cells at half). A strong
+  current (over 45 px/s) peels sticky cells loose and sets them tumbling; your
+  germs give a swirl emote. Before this, a biofilm colony only moved 58% of its
+  cells when stirred; now 100%.
+- **Personal space:** colonies of 30+ cells keep a little room between cells
+  when packed, so they don't ball up (not while basking in your light). Where
+  cells are packed, their glow dims so a clump reads as cells, not a white blur.
 - **How cells move:** run-and-tumble. A cell keeps swimming while food gets
   better and turns randomly when it doesn't. On top of that come the strain's
   goal, contact with other cells, currents and tilt.
@@ -130,6 +140,11 @@ Other species knobs:
 - How long visitors stay: friends 300–420 s, others 360–540 s (`dish_visit`).
 - Which species count as friendly: `SPECIES_FRIENDLY[]`, top of `dish.c`.
 - **Starters:** bacillus, coccus, spirillum, cyano, vibrio, myxo. The last three cost DNA to unlock.
+- **Names:** 28 microbe-flavoured names to scroll through (STAPHANIE, MICROBERT,
+  E. COLIN, PETRA DISH, SPOROTHY...), and tapping the name box rolls a made-up
+  one from a germy front and a silly back ("STREPPOZILLA") (`NAMES[]`,
+  `name_roll` in `dish_ui.c`). Plurals are fixed: cocci, bacilli, spirilla
+  (`dish_plural_fix`).
 
 ---
 
@@ -160,9 +175,10 @@ Files: `common/dish_brain.c`, `common/dish_ai.c`.
     0.1), goes to meet a stranger (curious strains), or minds its own life.
   - **Feasts:** hungry cells head for the richest food in the dish, so
     different kinds end up eating side by side.
-- **What you see:** thought lines (dashed lines toward the target), alliance
-  links (green dots with a beating heart), rivalry crackle (red), the
-  microscope lens text, and emote bubbles.
+- **What you see:** colony status labels (section 23), the microscope lens,
+  emote bubbles, a heart between allies side by side and a red crackle between
+  rivals face to face. The dashed "where it's heading" lines, settler trails and
+  alliance links were removed: the minds decide where to go, and the labels say why.
 
 **Alliances and rivalries** (`dish_tick`, after meetings):
 
@@ -197,6 +213,10 @@ File: `common/dish.c` (`dish_temper` at line 485; per-cell steering around line 
   - Social cells (above 0.7) return to the colony when more than 45 px away.
   - Speed varies ±15% with boldness.
   - Bold cells split slightly sooner.
+- **Loners** (social below 0.3) keep to the colony's edge, unless they're in your light.
+- **The brave few:** when the colony flees, cells with boldness above 0.82 turn
+  and face the threat instead.
+- **Roles** shown in the microscope lens: BRAVE, CURIOUS, LONER, CLINGY or STEADY.
 - **Swarm mind** cancels 32% of individuality per tier (`indiv`, line 939).
 
 Temperament also picks each strain's voice (section 18) and drives population
@@ -272,6 +292,38 @@ Numbers are per tier.
 | Grapple | Latches on, drains and drags prey home | 1035 |
 | Symbiosis | Friends stay and share; at tier 3 they give free mutations | `M_SYMBIOSIS` in `cell_tick` |
 | Quorum bloom | At 45 − 5 cells, a 12-second boom in splitting every 80 − 15 s | 1369 |
+
+### Every mutation has a cost
+
+Shown in red on its draft card. Each mutation's `cost` and body `tint` are in `MUTS[]`.
+
+| Mutation | Cost |
+|---|---|
+| Spikes | Pricks its own cells when packed (0.012 health a second per tier) |
+| Toxin cloud | Spoils its own food (1% a second per tier) |
+| Zap | Each zap costs every cell in the colony 0.02 energy |
+| Jet | Each jet costs 0.06 energy |
+| Engulf | Stunned for 1 s while digesting |
+| Swarm mind | Infection passes between touching cells of the school |
+| Biofilm wall | Anchors trap waste around them |
+| Sunlight | 25% hungrier per tier at night |
+| Glow lure | Lures viruses in too |
+| Spore burst | Spores hatch with 0.25 energy |
+| Virus tamer | A tamed virus has a 1%-a-second chance to go wild again |
+| Mimicry | 5% slower per tier |
+| Scouts | Scouts lose health when more than 120 px from home |
+| Grapple | A cell holding prey is slowed |
+| Symbiosis | Gives energy to friends it touches |
+| Quorum bloom | Every cell loses 0.15 energy when a bloom ends |
+
+### How they look
+
+The strongest mutation tints the whole body toward its colour (14% + 12% per
+tier). Signature features: spines with red tips, a green haze with drips,
+crackling sparks, twin jet nozzles, a red maw, swept-back fins, a slime coat,
+green chloroplasts, an antenna with a glowing orb, spore pods, orbiting virus
+hexagons, mottled camouflage, twitching antennae, hooked pili, pink heart spots,
+a breathing yellow ring.
 
 ### The 8 synergies
 
@@ -477,6 +529,8 @@ Files: `common/dish_prog.c` (`SHOP[]`, `dish_shop_buy`), `common/dish_ui.c`
 Open it by tapping the DNA pill at the top. Two tabs. Tap an item once to read
 what it does ("… TAP AGAIN TO BUY"), and again to buy. Items marked with a dot
 stay; placed items ask where to go. Up to 6 placed items (`DISH_DECOR`).
+**Tap a placed item** to see what it is (an egg says how long until it hatches);
+**drag it** to move it (`decor_at`, `decor_info` in `dish_ui.c`).
 
 **DISH tab**
 
@@ -658,8 +712,7 @@ about 9 characters. Lines now mostly appear when tapped, in the explanation bar.
 - **Hints and the coach overlap a little.** The older first-time hints (for
   example "hold to shine light") can appear before the coach demonstrates the
   same thing. Consider retiring the gesture hints now the coach covers them.
-- **Placed items can't be moved or sold.** A 7th replaces the oldest; there's
-  no way to pick one up.
+- **Placed items can be moved but not sold.** A 7th replaces the oldest.
 - **Social balance.** Alliances and rivalries are tuned by the 0.35 / −0.4
   thresholds and the familiarity rates in `dish_tick`; mobs only form against
   real hunters within 150 px (`social_goal`).
@@ -676,3 +729,70 @@ about 9 characters. Lines now mostly appear when tapped, in the explanation bar.
 - **Unattended play.** In the selftest that plays 30 runs of 20 minutes with
   no player input, no runs die out now (3 before), helped by the more frequent
   mutation cards.
+
+---
+
+## 22. Generations
+
+Files: `common/dish_mut.c` (`dish_mut_take`), `common/dish.c` (`cell_tick`, `census`).
+
+- When your colony takes a mutation, a new **era** begins (`strain.era`). Cells
+  alive at that moment are the **old guard**: they keep the old look
+  (`old_morph`, with a silver rim and a greyer body) and **don't** get the new
+  mutation's tier. Cells born afterwards are the **new blood**.
+- How they get along is chosen from the colony's temperament at that moment:
+
+| Way | When | What happens (for `ERA_CONTEST_S` = 150 s) |
+|---|---|---|
+| Purge | Ruthless above 0.55 | New blood bites the old guard (0.25 health, 1.5 tries a second) |
+| Elders | Social above 0.6 | The old feed the young (0.04 energy a second) and age twice as fast, making way |
+| Race | Otherwise | New blood splits sooner (−0.08 energy needed), the old guard later (+0.08) |
+
+- A "NEW GENERATION" moment card announces it, the colony's label says
+  "NEW BLOOD VS OLD GUARD" (or "ELDERS FEEDING THE YOUNG" / "OLD AND NEW RACE
+  TO GROW") while it lasts, and the lens marks each cell OLD GUARD or NEW BLOOD.
+- Only your colony has generations; visitors arrive as one. Saved (v11), though
+  a loaded dish starts as one generation.
+
+---
+
+## 23. Status labels, stats and the director
+
+**Colony status labels** (`colony_status`, `labels_tick`, `draw_labels` in `dish_ui.c`):
+
+- A small pill over a colony saying what it's doing and why, e.g.
+  "STAPHANIE: HUDDLING, VIBRIO NEARBY", "AMOEBA: HUNTING STAPHANIE",
+  "DIATOM: VISITING STAPHANIE", "STAPHANIE: FEASTING", "STAPHANIE: EATING ITS OWN".
+- Shown for 4 s when a colony changes its mind (aimed goals, policies,
+  generations; your colony always), or when a colony of 15+ cells is packed
+  together. At most three at once; each colony waits 6–14 s before showing
+  again. Tap one for the longer explanation. A tap squarely on a cell still pokes the cell.
+
+**Live stats:**
+
+- **In the dish:** a chip right of STORY shows your cell count and a trend arrow.
+  Tap it for a panel: cells in total, each species' count and change per minute,
+  births and deaths per minute, the main cause of death, DNA per minute, and
+  how many alliances and rivalries there are.
+- **On the web page:** a "Live stats" card in the sidebar with the same numbers,
+  a coloured bar per species, and a chart of the cell count over the last three minutes.
+- Sampled every 5 s, one minute kept (`stats_tick`; `dish_ui_stats` flattens it
+  for the page through `web_stats`).
+
+**The director** (`dish_prog_tick` in `dish_prog.c`):
+
+- It tracks how active you are (each touch adds 1, fading over about 40 s) and
+  how long the dish has been quiet (reset by arrivals and wonders).
+- When you're active (above 3) and the dish has been quiet for 40 s, it brings
+  a surprise, at most every 60–100 s, weighted by the state of the dish:
+
+| Surprise | More likely when |
+|---|---|
+| A challenger (vibrio, amoeba or myxo, maybe with mutations) | Your colony has 30+ cells and no threats around |
+| Help (diatom, symbiont or ciliate) | Your colony is small or hungry |
+| A stranger (a dropper-style wild visitor) | There are no visitors |
+| An egg falling in | Always possible |
+| A feast (food rain) | Your colony is hungry |
+
+- A "SURPRISE!" moment card says what it is. An idle keeper gets none.
+- This is the game's own rules reading engagement and the dish's state, not the AI model.
