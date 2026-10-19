@@ -393,6 +393,44 @@ AI (stress, boldness, sociability, curiosity), so **the model decides what a hot
 | Sharer | Feeds hungry sisters it touches (tier 2: allies too) | The full go hungry | Holds out a green crumb |
 | Cannibal | Eats weaker sisters when hungry; tier 2 the dying; tier 3 smaller strangers | The whole dish fears it | Fangs and a red drip; angry brows |
 
+### What each tier adds
+
+Every tier does something of its own; the card shows the line for the tier it would give.
+
+| Gene | Tier 1 | Tier 2 | Tier 3 |
+|---|---|---|---|
+| Spikes | Touching it hurts (0.06/s) | Hurts twice as much | Attackers are knocked back off the spines and stunned |
+| Toxin Cloud | A haze, 0.03/s | Wider and stronger | Half again as deadly, and leaves a hanging fog |
+| Nanowires | Wired neighbours share food | The line shocks strangers | The whole wired colony shares one store |
+| Pili | Hooks latch on and drain | Twitches along in jerks | Hauls its catch home to the colony's middle |
+| Biofilm Wall | 12% become anchors (half harm) | More anchors | A fortress: anchors take a quarter |
+| Persisters | Few sleepers, 90% less harm | More sleepers | Sleepers take 97% less |
+| Spore Burst | 1 spore | 2 spores | 3 spores |
+| CRISPR | Only viruses it has met are cut (memory) | Cuts unknown viruses too | Viruses join it |
+| Sunlight | Light feeds it | Dim light counts as brighter | In good light it barely needs food |
+| Glow Lure | Draws strangers in | Further and stronger | Those close to it are spellbound and barely swim |
+| Chemotaxis | Scouts leave a trail; foragers follow | More scouts, a stronger pull | The whole colony follows its nose, whatever it is doing |
+| Cheater | Siphons from those it touches (they notice) | Unnoticed | Siphons from anyone near |
+| Jet | Jets away when fleeing | Faster, longer | A hunter's touch sets it off even at rest |
+| Swarm Mind | Swims as a school | Tighter | Individual traits all but vanish: one mind |
+| Magnetotaxis | Steers to the tilt | Neighbours link into chains | Steers against currents |
+| Gas Vesicles | Rides currents 40% further | Rides currents toward food | Rides even weak currents, and sails on toward new ground in still water |
+| Symbiosis | Friends stay and share (any colony's friends: allies, or friendly kinds beside your colony) | Shares twice as much | Friends go for whatever hunts it and bite it |
+| Quorum Choir | Pulses on a shared beat | Blooms | The song stuns strangers |
+| Plasmid Swap | Passes genes to other strains | Takes genes back | Genes spread among its own sisters too, even in keeper mode |
+| Startle | Flashes and scatters when poked | Remembers where danger was | A startled cell bites what touches it |
+| Day Clock | Splits by day, safer by night | Stronger | Day-night flips no longer leave it reeling |
+| Pacifist | Never starts a fight; softer blows | Others warm to it faster | Hunters lose interest |
+| Hothead | Picks fights (meets strangers with a hunt) | Bites what it touches | Charges the nearest stranger |
+| Couch Potato | Slow, hardly hungry | A model "burst" becomes a nap | Barely moves |
+| Speed Freak | Fast and hungry | Splits fast, can't rest | A blur: faster still |
+| Hermit | Keeps its distance from sisters | Wanders off from the middle | Spreads wide and keeps no company |
+| Clingy | Hugs its sisters | Huddles tighter | Never lets go: a current can't peel it off |
+| Reckless | Reports less danger | Explores first | Never flees: it turns on the threat |
+| Skittish | Bolts from hunters | Bolts sooner | Bolts from any stranger, and never rests (it huddles, eyes open) |
+| Sharer | Feeds hungry sisters | Feeds friends and allies too | The whole colony shares one store |
+| Cannibal | Eats its weak when hungry | Eats the dying | Eats anyone smaller |
+
 ### The 22 synergies
 
 Any tier of both parts counts. Each is announced the first time with a moment card. A card that
