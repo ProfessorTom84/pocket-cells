@@ -271,7 +271,16 @@ kbd { font: 500 12px/1 var(--mono); color: var(--food); border: 1px solid #4a3a1
   }
   async function mindStart() {
     try {
-      const [model, tok] = await Promise.all(["model_q4.bin", "tokenizer.bin"].map(f => fetch(f).then(r => { if (!r.ok) throw new Error(f + " " + r.status); return r.arrayBuffer(); })));
+      /* the model file as is, or (where a host serves no .bin) the same bytes as base64 text */
+      const get = async f => {
+        try { const r = await fetch(f + ".bin"); if (r.ok && !(r.headers.get("content-type") || "").includes("text/html")) return await r.arrayBuffer(); } catch (e) {}
+        const r = await fetch(f + ".b64.txt"); if (!r.ok) throw new Error(f + " " + r.status);
+        const s = atob((await r.text()).replace(/\s+/g, "")), b = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+        return b.buffer;
+      };
+      aiEl.textContent = "AI model: downloading (7.6 MB)...";
+      const [model, tok] = await Promise.all([get("model_q4"), get("tokenizer")]);
       let waiting = null;
       const ready = ok => { mindReady = ok; aiEl.textContent = ok ? "AI model: ready" : "AI model: could not start (the colonies use simple rules)"; if (ok && M) M._web_mind_on(1); };
       try {                                          /* a worker, if the page may have one */
