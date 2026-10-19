@@ -150,35 +150,66 @@ Other species knobs:
 
 ## 4. Minds: goals and decisions
 
-Files: `common/dish_brain.c`, `common/dish_ai.c`.
+Files: `common/dish_mind.c` (the translator), `common/llm/advisor_core.c` (the model engine),
+`sim/web_mind.c` + `sim/web/mind-worker.js` (the browser), `firmware/main/dish_app.c` (the board).
 
-- **When minds decide:** each strain re-decides every 3–4.5 seconds (`ASK_S`, `dish.c:16`).
-- **The 12 goals:** forage, cluster, explore, rest, divide, spore, seek light,
-  avoid light, hunt, flee, guard, befriend. The last four are aimed at another strain.
-- **On the board:** a 14-million-parameter AI model reads a one-line
-  description of the strain's situation (`dish_encode`). It answers with a
-  goal, a target, an urgency and what to say.
-  - The new creatures are described to it as the closest existing species:
-    amoeba as myxo, diatom as cyano, rotifer as ciliate (`kind_word`). This
-    keeps the existing model working without retraining.
-- **In the web build:** a hand-written rules brain (`rules_goal`) makes the
-  same kinds of decisions. Rough priorities:
-  - Threat nearby: turn to spores if weak, fight if strong, otherwise flee or huddle.
-  - Then: low comfort, light, hunger, friends, prey, crowding, night, splitting.
-- **The social layer** (`social_goal` in `dish_brain.c`), run by every strain's
-  rules mind (on the board, the AI model still decides your colony's goals):
-  - **Mobs:** if a real hunter (a predator kind, or a strain with fighting
-    mutations) is within 150 px of a strain this one likes or is allied with,
-    a bold strain goes after the hunter; a timid one guards the victim.
-  - **Feuds:** declared rivals pick fights (bold) or keep clear (timid).
-  - **Visits:** in 20-second turns, a strain visits a friend (feeling above
-    0.1), goes to meet a stranger (curious strains), or minds its own life.
-  - **Feasts:** hungry cells head for the richest food in the dish, so
-    different kinds end up eating side by side.
-- **What you see:** colony status labels (section 23), the microscope lens,
-  emote bubbles, a heart between allies side by side and a red crackle between
-  rivals face to face. The dashed "where it's heading" lines, settler trails and
-  alliance links were removed: the minds decide where to go, and the labels say why.
+**Every colony's mind is the project's AI model.** It's the 14-million-parameter model distilled
+from gemma4:26b that runs the fish tank (`model/out/model_q4.bin`, schema v4), used as is, with no
+new training. It runs in the browser, in the desktop simulator, and on the board.
+
+- **How a colony asks:** every 2.5 s or so, each colony describes its situation in the model's own
+  words (`dish_mind_encode`):
+
+  | Model's word | What it means for a colony |
+  |---|---|
+  | hunger | How empty it is (1 − energy) |
+  | energy | Its health |
+  | stress | Threats nearby, discomfort, infection |
+  | curiosity, bold, social | Its temperament (section 5) |
+  | stage | How big it has grown (fry under 4 cells, juv under 15, adult under 60, elder) |
+  | trust | How it feels about your colony |
+  | bored | How long it has kept its goal |
+  | food | The richest food, or the nearest prey for a hunter |
+  | friend | The strain it likes most |
+  | bubble | Something worth visiting: your light, a crystal, vent, fountain, egg, pollen grain |
+  | reef | A stranger or rival |
+  | wall | The glass, if it's close |
+
+- **How the answer becomes behaviour** (`read_back`):
+
+  | Model's goal | Colony's goal |
+  |---|---|
+  | seek_food | Forage; hunt prey if a hunter; come to the light if green; split if full |
+  | follow_friend | Visit the friend, or guard it if something hunts it |
+  | inspect_reef | Go and meet the stranger, or fight it if they're rivals (or it's prey) |
+  | visit_bubbles | Come to your light, or roam to the point of interest |
+  | explore | Explore |
+  | rest | Rest (spores in a harsh dish) |
+  | dart_play | A burst of splitting if full, otherwise a roam |
+
+  The model's urgency and how sure it is (its softmax) carry over.
+- **Reflexes, below the mind** (as in the tank): fleeing a predator that is close to a weak or
+  outnumbered colony, and turning to spores when the dish is deadly. Viruses and mold aren't
+  minds; they keep their simple rules (`dish_brain_rules`).
+- **Before a colony's first answer** it keeps the goal it has (a second or so in the browser).
+- **Where it runs:**
+  - Browser: in a background worker, so a decision never stalls a frame (about 250 ms a
+    decision). The page downloads the model once (7.6 MB; on the published page as base64
+    text, 10 MB). The sidebar shows "AI model: thinking for every colony" with counts.
+  - Desktop simulator window: on the main thread, one decision a frame (about 21 ms).
+  - Board: loads the model already in the "model" partition (the installer writes it) with the
+    tokenizer already built in, and thinks on core 1 between render bands (about 3.7 s a
+    decision on the ESP32-S3, so each colony updates every few seconds to tens of seconds).
+    This firmware change has not been compiled or run on a board yet.
+- **Checked by** `dishsim --selftest-model`, which runs the real model file: in a 3-minute dish
+  with visitors, 147 of 154 decisions came from the model (the rest waited for a first answer),
+  spread over seek_food 17%, visit_bubbles 11%, follow_friend 5%, explore 18%, rest 1%,
+  dart_play 28%, inspect_reef 18%.
+- **The rules mind** (`dish_brain_rules`, with its social layer: mobs, feuds, visits) is still
+  in the code. The selftests use it so their numbers are repeatable, and the game falls back to
+  it only if the model can't be loaded.
+- **The dish-specific model** (`dish_ai.c`, `docs/dish-ai.md`) is unused: it was never trained,
+  and isn't needed.
 
 **Alliances and rivalries** (`dish_tick`, after meetings):
 
@@ -706,9 +737,10 @@ about 9 characters. Lines now mostly appear when tapped, in the explanation bar.
   turned into something else.
 - **Leftover drug tools.** `dish_dose`, `dish_antiviral` and `dish_uv` are no
   longer player controls; only the selftests use them.
-- **The AI model wasn't retrained.** On the board, the model still picks goals
-  and what to say; the new creatures are described to it as existing species.
-  Population control, voices, emotes and the shop are the game's own rules, not the model.
+- **The AI model decides goals; the game's own rules do the rest.** Population control,
+  voices and what's said, emotes, the shop and the director are game code, not the model.
+- **The model was trained on fish.** It reads each colony as a fish would see its tank, so its
+  choices are a fish's instincts in a germ's body. That's the price of no training.
 - **Hints and the coach overlap a little.** The older first-time hints (for
   example "hold to shine light") can appear before the coach demonstrates the
   same thing. Consider retiring the gesture hints now the coach covers them.
